@@ -26,6 +26,7 @@ const (
 	authEndpointWithBasicAuth             = "/authWithCreds"
 	authEndpointWithBasicAuthOnlyUsername = "/authWithCredsUser"
 	authEndpointWithBody                  = "/authWithBody"
+	authEndpointWithHeader                = "/authWithHeader"
 )
 
 var fakeCookie = &http.Cookie{
@@ -48,6 +49,12 @@ func newFakeServer(t *testing.T) fakeServer {
 			}
 			switch r.URL.Path {
 			case authEndpointNoCreds:
+				authed()
+			case authEndpointWithHeader:
+				if !cmp.Equal(r.Header.Get("hello"), "world") {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
 				authed()
 			case authEndpointWithBody:
 				body, err := io.ReadAll(r.Body)
@@ -112,6 +119,7 @@ func TestAuthConfig_Start(t *testing.T) {
 		Username string
 		Password string
 		Body     string
+		Headers  map[string]string
 	}
 	type args struct {
 		renewal  time.Duration
@@ -132,6 +140,21 @@ func TestAuthConfig_Start(t *testing.T) {
 			args: args{
 				renewal:  renewal,
 				endpoint: authEndpointNoCreds,
+			},
+			firstAuthCount:    1,
+			lastAuthCount:     3,
+			firstHTTPResponse: http.StatusOK,
+			lastHTTPResponse:  http.StatusOK,
+		},
+		{
+			name: "success no creds, no body, header set",
+			args: args{
+				renewal:  renewal,
+				endpoint: authEndpointWithHeader,
+			},
+			fields: fields{
+				Method:  http.MethodPost,
+				Headers: map[string]string{"hello": "world"},
 			},
 			firstAuthCount:    1,
 			lastAuthCount:     3,
@@ -212,6 +235,7 @@ func TestAuthConfig_Start(t *testing.T) {
 				Method:   tt.fields.Method,
 				Username: tt.fields.Username,
 				Password: tt.fields.Password,
+				Headers:  tt.fields.Headers,
 				Body:     tt.fields.Body,
 				Renewal:  config.Duration(tt.args.renewal),
 			}
